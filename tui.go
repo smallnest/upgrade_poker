@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+	"os"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
@@ -82,6 +83,11 @@ type TUI struct {
 	// AI thinking animation
 	thinkingPos PlayerPosition
 	thinking    bool
+
+		// Quit flag
+		quitting bool
+
+		lastEscTime time.Time
 }
 
 func NewTUI(g *Game) *TUI {
@@ -147,13 +153,23 @@ func (t *TUI) Run() {
 			t.width, t.height = ev.Size()
 			t.screen.Sync()
 		case *tcell.EventKey:
-			if ev.Key() == tcell.KeyCtrlC || ev.Key() == tcell.KeyEsc {
+			if ev.Key() == tcell.KeyCtrlC {
+				t.quitting = true
+				t.actionChan <- UserAction{Type: "quit"}
 				t.screen.Fini()
 				return
 			}
-			t.handleKey(ev)
-		case *tcell.EventMouse:
-			t.handleMouse(ev)
+			if ev.Key() == tcell.KeyEsc {
+				if !t.lastEscTime.IsZero() && time.Since(t.lastEscTime) < 2*time.Second {
+					t.quitting = true
+					t.actionChan <- UserAction{Type: "quit"}
+					t.screen.Fini()
+					return
+				}
+				t.lastEscTime = time.Now()
+			} else {
+				t.handleKey(ev)
+			}
 		case *tcell.EventInterrupt:
 			// Redraw triggered by game goroutine
 			t.draw()
@@ -280,11 +296,14 @@ func (t *TUI) handleCardNav(ev *tcell.EventKey) {
 func (t *TUI) SleepForRedraw(d time.Duration) {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
+		if t.quitting {
+			return
+		}
 		time.Sleep(80 * time.Millisecond)
-		// Send redraw request (unbuffered, blocks until helper reads)
-		// This provides back-pressure: we don't proceed until the previous
-		// redraw request has been picked up by the helper goroutine.
-		t.redishReq <- struct{}{}
+		select {
+		case t.redishReq <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -376,7 +395,11 @@ func (t *TUI) submitSelection() {
 
 // WaitForAction blocks until the user performs an action
 func (t *TUI) WaitForAction() UserAction {
-	return <-t.actionChan
+	action := <-t.actionChan
+	if action.Type == "quit" {
+		os.Exit(0)
+	}
+	return action
 }
 
 // SetPhase changes the UI phase and resets selection
@@ -671,7 +694,7 @@ func (t *TUI) drawSouthHand() {
 
 	// Label
 	label := "南(你)"
-	t.drawString(t.width/2-len(label)/2, handY-2, label, tcell.StyleDefault.Bold(true))
+	t.drawString(t.width/2-runewidth.StringWidth(label)/2, handY-2, label, tcell.StyleDefault.Bold(true))
 
 		// Build draw order: trump first, then other suits
 		drawOrder := make([]Card, 0, len(player.Hand))
