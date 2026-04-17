@@ -64,6 +64,8 @@ const (
 	RankQ  Rank = 12
 	RankK  Rank = 13
 	RankA  Rank = 14
+	// Game won sentinel (after completing level 2)
+	RankGameWon Rank = 100
 	// Joker ranks
 	RankSmallJoker Rank = 15
 	RankBigJoker   Rank = 16
@@ -280,12 +282,16 @@ func LevelFromRank(r Rank) int {
 }
 
 // NextLevel returns the next level rank after the given one
-// Level progression: 2,3,4,5,6,7,8,9,10,J,Q,K,A (then wraps or game over)
+// Level progression: 3,4,5,6,7,8,9,10,J,Q,K,A,2 (then game won)
 func NextLevel(current Rank) Rank {
-	if current >= RankA {
-		return RankA // Game won, stays at A
+	switch current {
+	case RankA:
+		return Rank2
+	case Rank2:
+		return RankGameWon
+	default:
+		return current + 1
 	}
-	return current + 1
 }
 
 // LevelDisplayName returns the display name for a level

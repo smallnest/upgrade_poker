@@ -163,7 +163,7 @@ func TestAIPlayNoCrash(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 
 	g := &Game{
-		Level: [2]Rank{Rank2, Rank2},
+		Level: [2]Rank{Rank3, Rank3},
 		rng:   rng,
 	}
 	g.Players[PositionSouth] = NewPlayer(PositionSouth, false) // All AI
