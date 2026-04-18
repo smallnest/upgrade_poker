@@ -95,6 +95,11 @@ type TUI struct {
 		waitingForHuman bool
 
 		lastEscTime time.Time
+
+		// Double-click detection
+		lastClickTime time.Time
+		lastClickX    int
+		lastClickY    int
 }
 
 func NewTUI(g *Game) *TUI {
@@ -322,10 +327,34 @@ func (t *TUI) handleMouse(ev *tcell.EventMouse) {
 	btn := ev.Buttons()
 
 	if btn&tcell.Button1 != 0 {
+		// Detect double-click: same position within 500ms
+		now := time.Now()
+		isDoubleClick := false
+		if !t.lastClickTime.IsZero() && now.Sub(t.lastClickTime) < 500*time.Millisecond &&
+			t.lastClickX == x && t.lastClickY == y {
+			isDoubleClick = true
+		}
+		t.lastClickTime = now
+		t.lastClickX = x
+		t.lastClickY = y
+
 		// Check card clicks
 		for _, cr := range t.cardRects {
 			if x >= cr.X && x < cr.X+cr.W && y >= cr.Y && y < cr.Y+cr.H {
-				if t.phase == UIPhasePlaying || t.phase == UIPhaseDiscard {
+				if t.phase == UIPhasePlaying {
+					if isDoubleClick {
+						// Double-click: directly play this card
+						t.selected = map[int]bool{cr.Index: true}
+						t.submitSelection()
+					} else {
+						t.cursorIdx = cr.Index
+						if t.selected[cr.Index] {
+							delete(t.selected, cr.Index)
+						} else {
+							t.selected[cr.Index] = true
+						}
+					}
+				} else if t.phase == UIPhaseDiscard {
 					t.cursorIdx = cr.Index
 					if t.selected[cr.Index] {
 						delete(t.selected, cr.Index)
@@ -412,6 +441,23 @@ func (t *TUI) WaitForAction() UserAction {
 	return action
 }
 
+// WaitForActionOrTimeout waits for user action or timeout, whichever comes first.
+// Returns the action and whether it was a timeout.
+func (t *TUI) WaitForActionOrTimeout(timeout time.Duration) (UserAction, bool) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case action := <-t.actionChan:
+		if action.Type == "quit" {
+			t.screen.Fini()
+			os.Exit(0)
+		}
+		return action, false
+	case <-timer.C:
+		return UserAction{Type: "timeout"}, true
+	}
+}
+
 // SetPhase changes the UI phase and resets selection
 func (t *TUI) SetPhase(phase UIPhase) {
 	t.phase = phase
@@ -484,10 +530,9 @@ func (t *TUI) drawStatus() {
 	x += runewidth.StringWidth(" 闲打")
 	t.drawStringW(LevelDisplayName(opponentLevel), x, 0, valStyle)
 
-	// Right side: trump, score, trick count
+	// Right side: trump, score
 	opponentName := formatTeam(opponentTeam)
 	scoreStr := fmt.Sprintf("%d分", g.TeamScore[opponentTeam])
-	trickStr := fmt.Sprintf("%d/25", g.TrickCount)
 
 	rightParts := []struct {
 		text  string
@@ -496,8 +541,6 @@ func (t *TUI) drawStatus() {
 		{trumpStr, valStyle},
 		{" " + opponentName + "(闲):", bgStyle},
 		{scoreStr, valStyle},
-		{" 轮次:", bgStyle},
-		{trickStr, valStyle},
 	}
 
 	// Calculate total display width
@@ -927,7 +970,7 @@ func (t *TUI) drawActionButtons() {
 		}
 		selectedCount := len(t.selected)
 		hintStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen).Bold(true)
-		hint := fmt.Sprintf("点击牌选中(已选%d张/需选%d张) P:出牌 C:取消", selectedCount, needCount)
+		hint := fmt.Sprintf("双击直接出牌 或 点击选中(已选%d张/需选%d张) P:出牌 C:取消", selectedCount, needCount)
 		t.drawString(t.width/2-len(hint)/2, y-1, hint, hintStyle)
 		t.addButton("[Enter/P:出牌]", "play", t.width/2-14, y)
 		t.addButton("[C:取消]", "cancel", t.width/2+4, y)
@@ -941,7 +984,7 @@ func (t *TUI) drawActionButtons() {
 		case UIPhaseWaitTrick:
 			// Result shown in center box, bottom bar empty
 		case UIPhaseHandResult:
-			t.addButton("[Enter:继续]", "confirm", t.width/2-4, y)
+			t.drawString(t.width/2-12, y, "5秒后自动开始下一局(按键跳过)", tcell.StyleDefault.Foreground(tcell.ColorYellow))
 	case UIPhaseGameOver:
 		t.drawString(t.width/2-4, y, "游戏结束!", tcell.StyleDefault.Bold(true).Foreground(tcell.ColorYellow))
 	}

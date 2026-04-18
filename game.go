@@ -526,8 +526,8 @@ func (g *Game) HandleUpgrade() {
 	}
 
 	g.tui.SetPhase(UIPhaseHandResult)
-	g.tui.SetMessage(msg, []Button{{Label: "[Enter:继续]", Action: "confirm"}})
-	g.tui.WaitForAction()
+	g.tui.SetMessage(msg, nil)
+	g.tui.WaitForActionOrTimeout(5 * time.Second)
 	g.tui.SetMessage("", nil)
 
 	g.Dealer = newDealer
