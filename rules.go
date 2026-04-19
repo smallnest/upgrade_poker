@@ -383,16 +383,9 @@ func validateLeading(cards []Card, allHands [][]Card, trumpSuit Suit, level Rank
 		return true
 	}
 
-	// Multiple groups: 甩牌 - each group must be the maximum remaining
-	if allHands == nil {
-		return true
-	}
-
-	for _, g := range groups {
-		if !isMaxGroup(g, allHands, trumpSuit, level) {
-			return false
-		}
-	}
+	// Multiple groups: 甩牌 - always valid as long as same suit and clean groups
+	// The actual throw resolution (only throw max cards, or play single smallest)
+	// is handled by ResolveThrow before the play is made
 	return true
 }
 
@@ -847,4 +840,37 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ResolveThrow checks if a leading multi-card play is a valid throw (all groups are max).
+// If all groups are unbeatable, returns the cards as-is.
+// Otherwise, returns only the smallest single card.
+func ResolveThrow(cards []Card, allHands [][]Card, trumpSuit Suit, level Rank) []Card {
+	if len(cards) <= 1 || len(allHands) == 0 {
+		return cards
+	}
+
+	groups := AnalyzePlay(cards, trumpSuit, level)
+	allMax := true
+	for _, g := range groups {
+		if !isMaxGroup(g, allHands, trumpSuit, level) {
+			allMax = false
+			break
+		}
+	}
+
+	if allMax {
+		return cards // full throw is valid
+	}
+
+	// Not all max: play only the smallest single card
+	smallest := cards[0]
+	smallestOrder := cardRankOrder(smallest, trumpSuit, level)
+	for _, c := range cards[1:] {
+		if o := cardRankOrder(c, trumpSuit, level); o < smallestOrder {
+			smallest = c
+			smallestOrder = o
+		}
+	}
+	return []Card{smallest}
 }

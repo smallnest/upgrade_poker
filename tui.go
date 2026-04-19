@@ -770,10 +770,21 @@ func (t *TUI) drawSouthHand() {
 		cardW := 5
 		gap := 1
 		handY := t.height - 6
+		// Center dealing cards horizontally, ensure all cards fit
+		maxFit := (t.width - 4) / (cardW + gap)
+		dealCount := count
+		if dealCount > maxFit {
+			dealCount = maxFit
+		}
+		dealWidth := dealCount*(cardW+gap) - gap
+		dealStartX := (t.width - dealWidth) / 2
+		if dealStartX < 2 {
+			dealStartX = 2
+		}
 		label := "南(你)"
 		t.drawString(t.width/2-runewidth.StringWidth(label)/2, handY-2, label, tcell.StyleDefault.Bold(true))
 		for k := 0; k < count; k++ {
-			x := 2 + k*(cardW+gap)
+			x := dealStartX + k*(cardW+gap)
 			if x+cardW > t.width-2 {
 				break
 			}
@@ -799,7 +810,12 @@ func (t *TUI) drawSouthHand() {
 		cardsPerRow = 1
 	}
 	numRows := (totalCards + cardsPerRow - 1) / cardsPerRow
-	startX := 2
+	// Center cards horizontally based on full row width to ensure all cards fit
+	fullRowWidth := cardsPerRow*(cardW+gap) - gap
+	startX := (t.width - fullRowWidth) / 2
+	if startX < 2 {
+		startX = 2
+	}
 	handY := t.height - numRows*(cardH+1) - 3
 	if handY < t.height/2+2 {
 		handY = t.height / 2 + 2

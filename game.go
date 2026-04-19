@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -400,11 +401,19 @@ func (g *Game) humanPlayTUI(player *Player, trick *Trick) []Card {
 			}
 
 			if ValidatePlay(cards, leadCards, player.Hand, otherHands, g.TrumpSuit, level) {
+				// If leading with multiple cards (throw), resolve: only throw if all max, otherwise play smallest
+				if len(leadCards) == 0 && len(cards) > 1 {
+					cards = ResolveThrow(cards, otherHands, g.TrumpSuit, level)
+				}
 				g.tui.selected = make(map[int]bool)
 				return cards
 			}
-			// Invalid play - reset selection and try again
+			// Invalid play - show error and reset selection
 			g.tui.selected = make(map[int]bool)
+			errMsg := g.explainInvalidPlay(cards, leadCards, player.Hand, otherHands, g.TrumpSuit, level)
+			g.tui.SetMessage(errMsg, []Button{{Label: "[Enter:确认]", Action: "confirm"}})
+			g.tui.WaitForAction()
+			g.tui.SetMessage("", nil)
 		}
 	}
 }
@@ -597,4 +606,71 @@ func cardsToString(cards []Card) string {
 		}
 	}
 	return result
+}
+
+// explainInvalidPlay returns a human-readable explanation of why the play is invalid
+func (g *Game) explainInvalidPlay(cards []Card, leadCards []Card, hand []Card, allHands [][]Card, trumpSuit Suit, level Rank) string {
+	cardStr := cardsToString(cards)
+	if len(cards) == 0 {
+		return "请选择要出的牌"
+	}
+
+	if len(leadCards) == 0 {
+		// Leading
+		firstSuit := EffectiveSuit(cards[0], trumpSuit, level)
+		for _, c := range cards[1:] {
+			if EffectiveSuit(c, trumpSuit, level) != firstSuit {
+				return fmt.Sprintf("出的牌花色不一致\n%s\n甩牌必须是同一花色", cardStr)
+			}
+		}
+		groups := AnalyzePlay(cards, trumpSuit, level)
+		totalCards := 0
+		for _, g2 := range groups {
+			totalCards += len(g2.Cards)
+		}
+		if totalCards != len(cards) {
+			return fmt.Sprintf("出的牌不是有效组合\n%s\n需要完整的对子或拖拉机", cardStr)
+		}
+		if len(groups) > 1 {
+			var notMax []string
+			for _, g2 := range groups {
+				if !isMaxGroup(g2, allHands, trumpSuit, level) {
+					label := "单牌"
+					if g2.IsPair {
+						label = "对子"
+					} else if g2.IsTractor {
+						label = "拖拉机"
+					}
+					notMax = append(notMax, fmt.Sprintf("%s(%s)", label, cardsToString(g2.Cards)))
+				}
+			}
+			if len(notMax) > 0 {
+				return fmt.Sprintf("不能甩牌 - 不是最大的:\n%s\n以下组合可以被压过:\n%s", cardStr, strings.Join(notMax, ", "))
+			}
+		}
+		return fmt.Sprintf("出牌无效\n%s", cardStr)
+	}
+
+	// Following
+	if len(cards) != len(leadCards) {
+		return fmt.Sprintf("出牌数量不对(需出%d张,选了%d张)", len(leadCards), len(cards))
+	}
+	leadSuit := EffectiveSuit(leadCards[0], trumpSuit, level)
+	leadSuitInHand := 0
+	for _, c := range hand {
+		if EffectiveSuit(c, trumpSuit, level) == leadSuit {
+			leadSuitInHand++
+		}
+	}
+	leadSuitPlayed := 0
+	for _, c := range cards {
+		if EffectiveSuit(c, trumpSuit, level) == leadSuit {
+			leadSuitPlayed++
+		}
+	}
+	if leadSuitInHand > 0 && leadSuitPlayed < min(leadSuitInHand, len(leadCards)) {
+		return fmt.Sprintf("必须跟出%s花色的牌(手中有%d张)", leadSuit.Symbol(), leadSuitInHand)
+	}
+
+	return fmt.Sprintf("出牌无效\n%s", cardStr)
 }
