@@ -3,6 +3,8 @@ package upgrade_poker
 import (
 	"fmt"
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"time"
 	"os"
 
@@ -51,6 +53,7 @@ type Button struct {
 type TUI struct {
 	screen     tcell.Screen
 	game       *Game
+	mu         sync.Mutex          // protects all draw-visible fields below
 	phase      UIPhase
 	selected   map[int]bool  // selected card indices
 	cardRects  []CardRect    // card click areas
@@ -85,21 +88,20 @@ type TUI struct {
 	thinkingPos PlayerPosition
 	thinking    bool
 
-		// Quit flag
-		quitting bool
+	quitting atomic.Bool
 
-		// Dealing animation
-		dealCounts [4]int
+	// Dealing animation
+	dealCounts [4]int
 
-		// Waiting for human to play
-		waitingForHuman bool
+	// Waiting for human to play
+	waitingForHuman bool
 
-		lastEscTime time.Time
+	lastEscTime time.Time
 
-		// Double-click detection
-		lastClickTime time.Time
-		lastClickX    int
-		lastClickY    int
+	// Double-click detection
+	lastClickTime time.Time
+	lastClickX    int
+	lastClickY    int
 }
 
 func NewTUI(g *Game) *TUI {
@@ -139,20 +141,20 @@ func (t *TUI) Close() {
 
 // Run starts the TUI event loop (runs in main goroutine)
 func (t *TUI) Run() {
-	// Start game logic in separate goroutine
 	go t.game.RunTUI(t)
 
 	// Redraw notifier: game goroutine sends on redishReq, we inject an event
 	go func() {
 		for range t.redishReq {
 			t.screen.PostEvent(tcell.NewEventInterrupt(nil))
-			// Wait for the main loop to finish redraw before sending next
 			<-t.redishDone
 		}
 	}()
 
 	for {
+		t.mu.Lock()
 		t.draw()
+		t.mu.Unlock()
 		t.screen.Show()
 
 		ev := t.screen.PollEvent()
@@ -162,31 +164,38 @@ func (t *TUI) Run() {
 
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
+			t.mu.Lock()
 			t.width, t.height = ev.Size()
+			t.mu.Unlock()
 			t.screen.Sync()
 		case *tcell.EventKey:
 			if ev.Key() == tcell.KeyCtrlC {
-				t.quitting = true
+				t.quitting.Store(true)
 				t.actionChan <- UserAction{Type: "quit"}
 				t.screen.Fini()
 				return
 			}
 			if ev.Key() == tcell.KeyEsc {
 				if !t.lastEscTime.IsZero() && time.Since(t.lastEscTime) < 2*time.Second {
-					t.quitting = true
+					t.quitting.Store(true)
 					t.actionChan <- UserAction{Type: "quit"}
 					t.screen.Fini()
 					return
 				}
 				t.lastEscTime = time.Now()
 			} else {
+				t.mu.Lock()
 				t.handleKey(ev)
+				t.mu.Unlock()
 			}
 		case *tcell.EventMouse:
+			t.mu.Lock()
 			t.handleMouse(ev)
+			t.mu.Unlock()
 		case *tcell.EventInterrupt:
-			// Redraw triggered by game goroutine
+			t.mu.Lock()
 			t.draw()
+			t.mu.Unlock()
 			t.screen.Show()
 			t.redishDone <- struct{}{}
 		}
@@ -306,17 +315,24 @@ func (t *TUI) handleCardNav(ev *tcell.EventKey) {
 }
 
 // SleepForRedraw sleeps for the given duration while periodically redrawing the screen.
-// Called from the game goroutine to keep UI responsive during pauses.
 func (t *TUI) SleepForRedraw(d time.Duration) {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		if t.quitting {
-			return
-		}
-		time.Sleep(80 * time.Millisecond)
+	ticker := time.NewTicker(80 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+
+	for {
 		select {
-		case t.redishReq <- struct{}{}:
-		default:
+		case <-ticker.C:
+			if t.quitting.Load() {
+				return
+			}
+			select {
+			case t.redishReq <- struct{}{}:
+			default:
+			}
+		case <-deadline.C:
+			return
 		}
 	}
 }
@@ -460,6 +476,8 @@ func (t *TUI) WaitForActionOrTimeout(timeout time.Duration) (UserAction, bool) {
 
 // SetPhase changes the UI phase and resets selection
 func (t *TUI) SetPhase(phase UIPhase) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.phase = phase
 	t.selected = make(map[int]bool)
 	t.cursorIdx = 0
@@ -471,6 +489,8 @@ func (t *TUI) SetPhase(phase UIPhase) {
 
 // SetMessage displays a message with optional buttons
 func (t *TUI) SetMessage(msg string, buttons []Button) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.message = msg
 	t.msgButtons = buttons
 }
