@@ -1,6 +1,9 @@
 package upgrade_poker
 
-import "math/rand"
+import (
+	"math/rand"
+	"sort"
+)
 
 // AI functions for bidding and playing
 
@@ -596,24 +599,16 @@ func removeCards(cards []Card, targets []Card) []Card {
 }
 
 func sortCardsByRank(cards []Card) {
-	rand.Shuffle(len(cards), func(i, j int) { cards[i], cards[j] = cards[j], cards[i] }) // shuffle first for randomness
-	for i := 0; i < len(cards); i++ {
-		for j := i + 1; j < len(cards); j++ {
-			if cards[i].Rank > cards[j].Rank { // ascending (smallest first)
-				cards[i], cards[j] = cards[j], cards[i]
-			}
-		}
-	}
+	rand.Shuffle(len(cards), func(i, j int) { cards[i], cards[j] = cards[j], cards[i] })
+	sort.Slice(cards, func(i, j int) bool {
+		return cards[i].Rank < cards[j].Rank
+	})
 }
 
 func sortCardsByTrumpOrder(cards []Card, trumpSuit Suit, level Rank) {
-	for i := 0; i < len(cards); i++ {
-		for j := i + 1; j < len(cards); j++ {
-			if TrumpOrder(cards[i], trumpSuit, level) > TrumpOrder(cards[j], trumpSuit, level) {
-				cards[i], cards[j] = cards[j], cards[i]
-			}
-		}
-	}
+	sort.Slice(cards, func(i, j int) bool {
+		return TrumpOrder(cards[i], trumpSuit, level) < TrumpOrder(cards[j], trumpSuit, level)
+	})
 }
 
 // findPairsInHand finds all pairs in the player's hand
