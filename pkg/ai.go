@@ -481,7 +481,6 @@ func aiFormKill(trumpCards []Card, needPairs, needTractors int, trumpSuit Suit, 
 
 // aiTryThrow attempts to find a 甩牌 (throwing unbeatable cards)
 func aiTryThrow(hand []Card, otherHands [][]Card, trumpSuit Suit, level Rank) []Card {
-	// Group hand by effective suit
 	suitCards := make(map[Suit][]Card)
 	for _, c := range hand {
 		s := EffectiveSuit(c, trumpSuit, level)
@@ -496,13 +495,15 @@ func aiTryThrow(hand []Card, otherHands [][]Card, trumpSuit Suit, level Rank) []
 			continue
 		}
 
+		// Collect other players' cards of this suit once per suit, not per check
+		otherSuit := collectSuitCards(otherHands, suit, trumpSuit, level)
+
 		var throwables []Card
 		usedRanks := make(map[Rank]bool)
 
-		// Check for unbeatable tractors
 		tractors := findTractorsInCards(cards, trumpSuit, level)
 		for _, t := range tractors {
-			if isMaxTractorCards(t, collectSuitCards(otherHands, suit, trumpSuit, level), trumpSuit, level) {
+			if isMaxTractorCards(t, otherSuit, trumpSuit, level) {
 				throwables = append(throwables, t...)
 				for _, c := range t {
 					usedRanks[c.Rank] = true
@@ -510,34 +511,30 @@ func aiTryThrow(hand []Card, otherHands [][]Card, trumpSuit Suit, level Rank) []
 			}
 		}
 
-		// Check for unbeatable pairs (not already in tractors)
 		pairs := findPairsInCards(cards, trumpSuit, level)
 		for _, p := range pairs {
 			if usedRanks[p[0].Rank] {
 				continue
 			}
-			if isMaxPairCards(p, collectSuitCards(otherHands, suit, trumpSuit, level), trumpSuit, level) {
+			if isMaxPairCards(p, otherSuit, trumpSuit, level) {
 				throwables = append(throwables, p...)
 				usedRanks[p[0].Rank] = true
 			}
 		}
 
-		// Check for unbeatable singles (not already in pairs/tractors)
 		remaining := filterCards(cards, func(c Card) bool { return !usedRanks[c.Rank] })
 		for _, c := range remaining {
-			if isMaxSingleCard(c, collectSuitCards(otherHands, suit, trumpSuit, level), trumpSuit, level) {
+			if isMaxSingleCard(c, otherSuit, trumpSuit, level) {
 				throwables = append(throwables, c)
 			}
 		}
 
-		// Only throw if we have multiple groups (at least 2 cards that aren't just a single pair/tractor)
 		groups := AnalyzePlay(throwables, trumpSuit, level)
 		if len(groups) >= 2 && len(throwables) >= 2 {
 			points := 0
 			for _, c := range throwables {
 				points += c.Points()
 			}
-			// Prefer throws with more points, or more cards if points are equal
 			if points > bestPoints || (points == bestPoints && len(throwables) > len(bestThrow)) {
 				bestThrow = throwables
 				bestPoints = points
@@ -564,7 +561,7 @@ func collectSuitCards(hands [][]Card, suit Suit, trumpSuit Suit, level Rank) []C
 // Helper functions
 
 func filterCards(cards []Card, pred func(Card) bool) []Card {
-	var result []Card
+	result := make([]Card, 0, len(cards))
 	for _, c := range cards {
 		if pred(c) {
 			result = append(result, c)
@@ -583,11 +580,11 @@ func removeCard(cards []Card, target Card) []Card {
 }
 
 func removeCards(cards []Card, targets []Card) []Card {
-	toRemove := make(map[Card]bool)
+	toRemove := make(map[Card]bool, len(targets))
 	for _, t := range targets {
 		toRemove[t] = true
 	}
-	var result []Card
+	result := make([]Card, 0, len(cards))
 	for _, c := range cards {
 		if !toRemove[c] {
 			result = append(result, c)
@@ -688,14 +685,18 @@ func findTractorsInCards(cards []Card, trumpSuit Suit, level Rank) [][]Card {
 }
 
 func buildTractor(ranks []Rank, cards []Card, trumpSuit Suit, level Rank) []Card {
+	// Pre-index cards by rank for O(1) lookup
+	byRank := make(map[Rank][]Card, len(ranks))
+	suit := EffectiveSuit(cards[0], trumpSuit, level)
+	for _, c := range cards {
+		if EffectiveSuit(c, trumpSuit, level) == suit {
+			byRank[c.Rank] = append(byRank[c.Rank], c)
+		}
+	}
 	var result []Card
 	for _, r := range ranks {
-		count := 0
-		for _, c := range cards {
-			if c.Rank == r && EffectiveSuit(c, trumpSuit, level) == EffectiveSuit(cards[0], trumpSuit, level) && count < 2 {
-				result = append(result, c)
-				count++
-			}
+		if cs, ok := byRank[r]; ok && len(cs) >= 2 {
+			result = append(result, cs[:2]...)
 		}
 	}
 	return result
