@@ -44,8 +44,8 @@ func TrumpOrder(card Card, trumpSuit Suit, level Rank) int {
 		if card.Suit == trumpSuit {
 			return 80 // Main level rank
 		}
-		// Off-suit level rank: ordered by suit
-		return 70 + int(card.Suit)
+		// Off-suit level rank: all equal, first player wins
+		return 70
 	}
 
 	// 2s (常主)
@@ -53,8 +53,8 @@ func TrumpOrder(card Card, trumpSuit Suit, level Rank) int {
 		if card.Suit == trumpSuit {
 			return 60 // Main 2
 		}
-		// Off-suit 2s
-		return 50 + int(card.Suit)
+		// Off-suit 2s: all equal, first player wins
+		return 50
 	}
 
 	// Trump suit cards (not level rank, not 2)

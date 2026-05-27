@@ -706,18 +706,15 @@ func (t *TUI) drawTrickArea() {
 
 		// Show winner info in double-line box in center
 		if t.phase == UIPhaseWaitTrick {
+			winnerTeam := PlayerTeam(t.trickWinner)
+			isDealerWin := winnerTeam == g.DealerTeam()
+
 			winnerText := fmt.Sprintf("%s 赢得此轮", formatPosition(t.trickWinner))
-			pointsText := fmt.Sprintf("获得 %d 分", t.trickPoints)
 			cx := t.width / 2
 			cy := t.height / 2
 
 			ww := runewidth.StringWidth(winnerText)
-			pw := runewidth.StringWidth(pointsText)
-			maxW := ww
-			if pw > maxW {
-				maxW = pw
-			}
-			boxW := maxW + 8
+			boxW := ww + 8
 			boxH := 5
 			boxX := cx - boxW/2
 			boxY := cy - boxH/2
@@ -748,8 +745,15 @@ func (t *TUI) drawTrickArea() {
 
 			ws := tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true).Background(bg)
 			ps := tcell.StyleDefault.Foreground(tcell.ColorGreen).Bold(true).Background(bg)
-			t.drawStringW(winnerText, cx-ww/2, cy-1, ws)
-			t.drawStringW(pointsText, cx-pw/2, cy+1, ps)
+
+			if isDealerWin {
+				t.drawStringW(winnerText, cx-ww/2, cy, ws)
+			} else {
+				pointsText := fmt.Sprintf("获得 %d 分", t.trickPoints)
+				pw := runewidth.StringWidth(pointsText)
+				t.drawStringW(winnerText, cx-ww/2, cy-1, ws)
+				t.drawStringW(pointsText, cx-pw/2, cy+1, ps)
+			}
 		}
 }
 
