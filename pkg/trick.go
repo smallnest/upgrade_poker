@@ -1,4 +1,4 @@
-package main
+package upgrade_poker
 
 // Trick represents one round of play (4 players each playing cards)
 type Trick struct {

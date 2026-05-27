@@ -1,4 +1,4 @@
-package main
+package upgrade_poker
 
 // Game rules: trump determination, card comparison, tractor detection, play validation
 

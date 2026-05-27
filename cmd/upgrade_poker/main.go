@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/smallnest/upgrade_poker/pkg"
 )
 
 func main() {
-	game := NewGame()
-	tui := NewTUI(game)
+	game := upgrade_poker.NewGame()
+	tui := upgrade_poker.NewTUI(game)
 
 	if err := tui.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "无法初始化终端界面: %v\n", err)

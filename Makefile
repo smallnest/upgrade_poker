@@ -3,7 +3,7 @@
 BINARY=upgrade
 
 build:
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/upgrade_poker/
 
 run: build
 	./$(BINARY)

@@ -1,4 +1,4 @@
-package main
+package upgrade_poker
 
 import (
 	"fmt"
@@ -268,8 +268,9 @@ func TestThrowCards(t *testing.T) {
 		{{Suit: SuitDiamond, Rank: RankA, Copy: 0}},
 		{},
 	}
-	if ValidatePlay(throw, nil, hand, otherHands2, trumpSuit, level) {
-		t.Error("Throw AA+QQ should be invalid when someone else has KK pair (beats QQ)")
+	// ValidatePlay always returns true for multi-group leads; actual throw check is ResolveThrow
+	if len(ResolveThrow(throw, otherHands2, trumpSuit, level)) == len(throw) {
+		t.Error("Throw AA+QQ should be downgraded when someone else has KK pair (beats QQ)")
 	}
 
 	// Single pair is always valid (no throw check for single group)
@@ -293,11 +294,11 @@ func TestThrowCards(t *testing.T) {
 		{Suit: SuitSpade, Rank: RankQ, Copy: 0},
 	}
 	// Valid when no one has spade A (player has both) and no one has spade > Q
-	if !ValidatePlay(throwSingles, nil, hand, otherHands, trumpSuit, level) {
-		t.Error("Throw A+Q singles should be valid when no one has higher")
+	if len(ResolveThrow(throwSingles, otherHands, trumpSuit, level)) != len(throwSingles) {
+		t.Error("Throw A+Q singles should stay when no one has higher")
 	}
-	// Invalid when someone has spade K (> Q)
-	if ValidatePlay(throwSingles, nil, hand, otherHands2, trumpSuit, level) {
-		t.Error("Throw A+Q singles should be invalid when someone has K (> Q)")
+	// Downgraded when someone has spade K (> Q)
+	if len(ResolveThrow(throwSingles, otherHands2, trumpSuit, level)) == len(throwSingles) {
+		t.Error("Throw A+Q singles should be downgraded when someone has K (> Q)")
 	}
 }

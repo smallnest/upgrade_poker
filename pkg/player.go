@@ -1,4 +1,4 @@
-package main
+package upgrade_poker
 
 import "fmt"
 
