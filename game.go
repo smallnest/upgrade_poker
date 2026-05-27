@@ -425,6 +425,7 @@ func (g *Game) PlayHand() {
 
 	leadPlayer := g.Dealer
 
+	var lastTrick *Trick
 	for g.TrickCount < 25 {
 		g.tui.SetPhase(UIPhasePlaying)
 		winner := g.PlayTrickFromLead(leadPlayer)
@@ -439,28 +440,28 @@ func (g *Game) PlayHand() {
 		g.tui.SetPhase(UIPhaseWaitTrick)
 		g.tui.SleepForRedraw(3 * time.Second)
 
-		// Clear trick display and continue
+		lastTrick = g.CurrentTrick
 		g.CurrentTrick = nil
 		leadPlayer = winner
 	}
 
-	g.HandleBottomScore()
+	g.HandleBottomScore(lastTrick)
 	g.HandleUpgrade()
 }
 
 // HandleBottomScore handles the bottom card scoring
-func (g *Game) HandleBottomScore() {
+func (g *Game) HandleBottomScore(lastTrick *Trick) {
 	lastWinnerTeam := PlayerTeam(g.TrickWinner)
 	dealerTeam := g.DealerTeam()
 
-	if lastWinnerTeam != dealerTeam {
+	if lastWinnerTeam != dealerTeam && lastTrick != nil {
 		bottomPoints := 0
 		for _, c := range g.BottomCards {
 			bottomPoints += c.Points()
 		}
 
 		if bottomPoints > 0 {
-			multiplier := CalculateBottomMultiplier(g.CurrentTrick.Plays[g.TrickWinner], g.TrumpSuit, g.DealerLevel())
+			multiplier := CalculateBottomMultiplier(lastTrick.Plays[g.TrickWinner], g.TrumpSuit, g.DealerLevel())
 			totalBottom := bottomPoints * multiplier
 			g.TeamScore[lastWinnerTeam] += totalBottom
 		}
